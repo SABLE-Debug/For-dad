@@ -495,6 +495,11 @@
   // can never intercept taps or cover the live reel.
   var torn = false;
   function teardown(){
+    // Signal the reel that the blueprint is leaving — fires on EVERY teardown path
+    // (GSAP onComplete, reduced-motion, no-GSAP, and the 7s hardKill all call this).
+    // The reel gates its photo choreography on this so the one-by-one reveal is seen.
+    window.__bpDone = true;
+    try{ window.dispatchEvent(new Event('bpdone')); }catch(e){}
     if(torn) return; torn = true;
     bp.style.opacity = '0';
     bp.style.pointerEvents = 'none';
@@ -663,11 +668,17 @@ async function boot(){
   // ---------------------------------------------------------------- the 3 photo planes
   const targetH = 3.4;                         // base world-height for a portrait photo
   const cards = [];
+  // `x/y/z/rotY` here are each card's RESTING home (used by the living-drift in tick()).
+  // The intro choreography (playIntro) tweens each photo through a CENTERED hero slot
+  // one by one — these homes are where p1/p2 quietly recede to once p3 takes the finale.
+  // Nothing here sits beyond |x| ~1.4 while featured; the recede homes stay phone-safe.
   const layout = [
-    { tex:textures[0], x:-2.45, y: 0.55, z:-1.2, rotY: 0.42, baseH:3.4 },  // park / easy
-    { tex:textures[1], x: 2.45, y:-0.35, z:-1.2, rotY:-0.42, baseH:3.4 },  // drip / cars
-    { tex:textures[2], x: 0.0,  y: 1.18, z: 0.6, rotY: 0.0,  baseH:2.6 },  // family (landscape) — comes forward, lifted so the finale eyebrow clears the photo bottom
+    { tex:textures[0], x:-0.85, y:-0.30, z:-3.4, rotY: 0.30, baseH:3.4 },  // park / easy  — recedes back-left, deep & small
+    { tex:textures[1], x: 0.85, y:-0.55, z:-3.4, rotY:-0.30, baseH:3.4 },  // drip / cars  — recedes back-right, deep & small
+    { tex:textures[2], x: 0.0,  y: 1.18, z: 0.6, rotY: 0.0,  baseH:2.45 }, // family (landscape) — the finale HERO, lifted so the text clears below it
   ];
+  // The shared centered hero slot every photo passes through (fully on-screen on a phone).
+  const HERO = { x:0.0, z:0.6, yPortrait:-0.18, yFamily:1.18 };
   layout.forEach((L, i)=>{
     const card = makePhotoCard(THREE, L.tex, L.baseH, i===2);
     card.group.position.set(L.x, L.y, L.z);
@@ -690,33 +701,80 @@ async function boot(){
   const words = overlay.querySelectorAll('.o-hfd .w');
   const gsap = window.gsap;
 
-  if(REDUCED){
-    // reduced-motion: just settle everything into place, show text, gentle loop only
-    cards.forEach((c,i)=>{ c.group.position.y = layout[i].y; c.mat.uniforms.uReveal.value = 1; });
-    overlay.querySelectorAll('.o-eyebrow,.w,.o-sub,.o-sig').forEach(el=> el.style.opacity = 1);
-  } else {
-    const tl = gsap.timeline({ defaults:{ ease:'power3.out' } });
-    // 1) the two "sides" rise and assemble
-    tl.to(cards[0].group.position, { y:layout[0].y, duration:1.7 }, 0.2)
-      .to(cards[0].mat.uniforms.uReveal, { value:1, duration:1.6 }, 0.2)
-      .to(cards[1].group.position, { y:layout[1].y, duration:1.7 }, 0.55)
-      .to(cards[1].mat.uniforms.uReveal, { value:1, duration:1.6 }, 0.55)
-      // a slow cinematic camera push during the rise
-      .to(camera.position, { z:8.1, duration:3.4, ease:'power2.inOut' }, 0.2)
-      // 2) the family photo — the peak — comes forward and the sides ease back
-      .to(cards[2].group.position, { y:layout[2].y, duration:1.9, ease:'power4.out' }, 1.9)
-      .to(cards[2].mat.uniforms.uReveal, { value:1, duration:1.7 }, 1.9)
-      .to(cards[0].group.position, { x:layout[0].x*1.28, z:layout[0].z-1.1, duration:2.2, ease:'power2.inOut' }, 2.1)
-      .to(cards[1].group.position, { x:layout[1].x*1.28, z:layout[1].z-1.1, duration:2.2, ease:'power2.inOut' }, 2.1)
-      .to(camera.position, { z:7.4, duration:2.6, ease:'power2.inOut' }, 2.1)
-      // gentle highlight bloom on the family card
-      .to(cards[2].mat.uniforms.uGlow, { value:1.0, duration:1.6 }, 2.6)
-      // 3) the message resolves, word by word
-      .to(overlay.querySelector('.o-eyebrow'), { opacity:1, y:0, duration:1.0 }, 3.4)
-      .fromTo(words, { opacity:0, y:26 }, { opacity:1, y:0, duration:1.1, stagger:0.22 }, 3.7)
-      .to(overlay.querySelector('.o-sub'), { opacity:1, duration:1.2 }, 4.9)
-      .to(overlay.querySelector('.o-sig'), { opacity:1, duration:1.0 }, 5.6);
+  // ---- GATE: hold the photos in their sunk start state until the blueprint has
+  // finished dissolving, so the one-by-one reveal actually plays in view. The canvas
+  // itself already faded in above (gl-on) under the blueprint, so the swap is seamless;
+  // only the photo MOTION waits here. A 6500ms safety net guarantees the reel ALWAYS
+  // plays even if the 'bpdone' signal never arrives.
+  function whenBlueprintDone(cb){
+    if(window.__bpDone){ cb(); return; }
+    let fired = false;
+    const go = ()=>{ if(fired) return; fired = true; cb(); };
+    window.addEventListener('bpdone', go, { once:true });
+    setTimeout(go, 6500);
   }
+
+  function playIntro(){
+    if(REDUCED){
+      // reduced-motion: settle the finale composition instantly (hero family up front,
+      // the two portraits resting back), reveal all photos, show text. Living drift loops.
+      cards[0].group.position.set(layout[0].x, layout[0].y, layout[0].z);
+      cards[1].group.position.set(layout[1].x, layout[1].y, layout[1].z);
+      cards[2].group.position.set(HERO.x, HERO.yFamily, HERO.z);
+      cards.forEach(c=>{ c.mat.uniforms.uReveal.value = 1; });
+      cards[2].mat.uniforms.uGlow.value = 1.0;
+      overlay.querySelectorAll('.o-eyebrow,.w,.o-sub,.o-sig').forEach(el=> el.style.opacity = 1);
+      return;
+    }
+
+    // ---- TRUE ONE-BY-ONE REEL ----------------------------------------------------
+    // Each photo rises from sunk into the SAME centered hero slot (x=0, z=0.6), reveals
+    // via the shader wipe, holds a readable beat, then recedes (back in z + dim glow) as
+    // the next rises. p1 (park) -> p2 (cars) -> p3 (family: the biggest, longest, final
+    // hero that STAYS). The camera distance is tuned per phase so each hero fills the
+    // frame without clipping on a portrait phone (no card is ever featured past |x|~1.4).
+    const p1 = cards[0], p2 = cards[1], p3 = cards[2];
+    const tl = gsap.timeline({ defaults:{ ease:'power3.out' } });
+
+    // A slow continuous push runs underneath the whole reel (camera z 9 -> 11.2), easing
+    // to its furthest point as the family finale rises — so the wide landscape hero, the
+    // tall portrait heroes, AND the always-on orbit all clear a portrait phone frustum.
+    tl.to(camera.position, { z:11.2, duration:6.0, ease:'sine.inOut' }, 0);
+
+    // --- BEAT 1 — p1 (park) rises to centre, reveals, holds, recedes -------------
+    tl.fromTo(p1.group.position, { x:HERO.x, y:layout[0].y - 4.2, z:HERO.z },
+                                 { x:HERO.x, y:HERO.yPortrait, z:HERO.z, duration:1.5, ease:'power3.out' }, 0.15)
+      .fromTo(p1.group.rotation, { y:0.0 }, { y:0.0, duration:1.5 }, 0.15)
+      .to(p1.mat.uniforms.uReveal, { value:1, duration:1.5, ease:'power2.out' }, 0.2)
+      // hold ~1.2s, then recede to its resting home (deep, small, back-left)
+      .to(p1.group.position, { x:layout[0].x, y:layout[0].y, z:layout[0].z, duration:1.6, ease:'power2.inOut' }, 2.9)
+      .to(p1.group.rotation, { y:layout[0].rotY, duration:1.6, ease:'power2.inOut' }, 2.9)
+      .to(p1.mat.uniforms.uGlow, { value:0.10, duration:1.6 }, 2.9);
+
+    // --- BEAT 2 — p2 (cars) rises to centre, reveals, holds, recedes -------------
+    tl.fromTo(p2.group.position, { x:HERO.x, y:layout[1].y - 4.2, z:HERO.z },
+                                 { x:HERO.x, y:HERO.yPortrait, z:HERO.z, duration:1.5, ease:'power3.out' }, 3.0)
+      .fromTo(p2.group.rotation, { y:0.0 }, { y:0.0, duration:1.5 }, 3.0)
+      .to(p2.mat.uniforms.uReveal, { value:1, duration:1.5, ease:'power2.out' }, 3.05)
+      .to(p2.group.position, { x:layout[1].x, y:layout[1].y, z:layout[1].z, duration:1.6, ease:'power2.inOut' }, 5.7)
+      .to(p2.group.rotation, { y:layout[1].rotY, duration:1.6, ease:'power2.inOut' }, 5.7)
+      .to(p2.mat.uniforms.uGlow, { value:0.10, duration:1.6 }, 5.7);
+
+    // --- BEAT 3 — p3 (family) rises to the FINALE hero slot and STAYS -----------
+    // biggest, slowest, longest moment; lifted to y=1.18 so the text reads below it.
+    tl.fromTo(p3.group.position, { x:HERO.x, y:HERO.yFamily - 4.2, z:HERO.z },
+                                 { x:HERO.x, y:HERO.yFamily, z:HERO.z, duration:2.1, ease:'power4.out' }, 5.8)
+      .to(p3.mat.uniforms.uReveal, { value:1, duration:1.9, ease:'power2.out' }, 5.85)
+      .to(p3.mat.uniforms.uGlow, { value:1.0, duration:1.8 }, 6.4);
+
+    // --- FINALE TEXT — resolves below the family hero, word by word -------------
+    tl.to(overlay.querySelector('.o-eyebrow'), { opacity:1, y:0, duration:1.0 }, 7.4)
+      .fromTo(words, { opacity:0, y:26 }, { opacity:1, y:0, duration:1.1, stagger:0.22 }, 7.7)
+      .to(overlay.querySelector('.o-sub'), { opacity:1, duration:1.2 }, 8.9)
+      .to(overlay.querySelector('.o-sig'), { opacity:1, duration:1.0 }, 9.6);
+  }
+
+  whenBlueprintDone(playIntro);
 
   // ---------------------------------------------------------------- device tilt (gyro) parallax
   let tiltX = 0, tiltY = 0, tTiltX = 0, tTiltY = 0;
@@ -764,9 +822,15 @@ async function boot(){
     tiltX += (tTiltX - tiltX) * 0.05;
     tiltY += (tTiltY - tiltY) * 0.05;
 
-    // gentle auto-orbit of the whole world + tilt parallax on the camera
+    // gentle auto-orbit of the whole world + tilt parallax on the camera.
+    // Amplitudes are kept phone-safe so the always-on orbit (plus a hard device tilt)
+    // can never shove a centered hero photo off a narrow portrait frustum.
     const orbit = t * 0.06;
-    camera.position.x = Math.sin(orbit) * 0.9 + tiltX * 0.85;
+    // clamp the combined camera-x so the orbit stays full at rest but a hard device
+    // tilt can never push a centered hero photo off the edge of a portrait phone.
+    let camX = Math.sin(orbit) * 0.38 + tiltX * 0.45;
+    camX = Math.max(-0.45, Math.min(0.45, camX));
+    camera.position.x = camX;
     camera.position.y = Math.cos(orbit*0.8) * 0.4 - tiltY * 0.7;
     camera.lookAt(0, 0.1, 0);
 
