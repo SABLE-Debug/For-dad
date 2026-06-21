@@ -505,8 +505,9 @@
     bp.style.pointerEvents = 'none';
     setTimeout(function(){ if(bp && bp.parentNode){ bp.style.display = 'none'; } }, 1100);
   }
-  // Absolute safety net: no matter what, the intro is gone by ~7s.
-  var hardKill = setTimeout(teardown, 7000);
+  // Absolute safety net: no matter what, the intro is gone by ~12s (the title-card
+  // hold makes the natural timeline ~10s; this sits safely beyond it).
+  var hardKill = setTimeout(teardown, 12000);
 
   // Prime the line-draw: dash the full path length and hide it (offset = length).
   var LEN = 0;
@@ -555,8 +556,11 @@
       .to('#blueprint .bp-title',  { opacity:1, duration:.8 }, 2.7)
       .to('#blueprint .bp-status', { opacity:1, duration:.7 }, 3.15)
 
-      // 5) hold the finished spec, then dissolve to reveal the reel underneath
-      .to({}, { duration:0.9 })
+      // 5) ease the sheet BACK to a soft level so the finale title ("Happy Father's
+      //    Day") shows THROUGH alongside the heart — the title card — then HOLD that
+      //    ~4s, then complete the dissolve to reveal the photo reel underneath.
+      .to('#blueprint', { opacity:0.6, duration:1.1, ease:'power2.inOut' }, 4.0)
+      .to({}, { duration:4.0 })
       .to('#blueprint', { opacity:0, duration:1.0, ease:'power2.inOut' });
     return;
   }
@@ -711,7 +715,7 @@ async function boot(){
     let fired = false;
     const go = ()=>{ if(fired) return; fired = true; cb(); };
     window.addEventListener('bpdone', go, { once:true });
-    setTimeout(go, 6500);
+    setTimeout(go, 12500);   // last-resort net — must sit AFTER the (now ~10s) blueprint
   }
 
   function playIntro(){
