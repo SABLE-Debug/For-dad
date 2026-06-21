@@ -218,7 +218,8 @@
     font-family:'Geist Mono', ui-monospace, monospace;
     font-size:11px; color:var(--gold);
     text-transform:uppercase; opacity:0;
-    margin-bottom:12px;
+    margin-bottom:14px;
+    letter-spacing:.04em;
   }
   #overlay .o-hfd{
     font-size:clamp(36px, 12vw, 70px);
@@ -262,12 +263,177 @@
   }
   @keyframes pulse{ 0%,100%{opacity:.25; transform:scale(.8);} 50%{opacity:1; transform:scale(1.15);} }
 
+  /* ============================================================
+     LAYER 3 — BLUEPRINT INTRO (independent SVG/CSS + GSAP overlay).
+     Sits ABOVE everything (z-index:10) and renders FIRST, so the
+     WebGL scene boots underneath while the heart draws. Fades out
+     to reveal the reel. Self-contained — never touches the canvas.
+     Warm-gold draughting on the reel's own near-black ground.
+     ============================================================ */
+  #blueprint{
+    position:fixed; inset:0; z-index:10;
+    overflow:hidden;
+    background:
+      radial-gradient(120% 80% at 50% 12%, #160e06 0%, var(--bg2) 44%, var(--bg) 82%);
+    opacity:1;
+    /* JS fades this via inline opacity; this transition makes the exit smooth */
+    transition:opacity 1.0s ease;
+    will-change:opacity;
+  }
+  /* faint draughting grid — pure CSS, no DOM cost */
+  #blueprint .bp-grid{
+    position:absolute; inset:0; pointer-events:none;
+    background-image:
+      linear-gradient(rgba(231,185,106,.07) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(231,185,106,.07) 1px, transparent 1px);
+    background-size:7.4vw 7.4vw, 7.4vw 7.4vw;
+    background-position:center center;
+    -webkit-mask-image:radial-gradient(125% 100% at 50% 45%, #000 60%, transparent 100%);
+            mask-image:radial-gradient(125% 100% at 50% 45%, #000 60%, transparent 100%);
+    opacity:0;
+  }
+  /* the framed "sheet" — inset border the corner ticks anchor to */
+  #blueprint .bp-frame{
+    position:absolute;
+    left:22px; right:22px;
+    top:max(58px, calc(env(safe-area-inset-top) + 30px));
+    bottom:max(40px, calc(env(safe-area-inset-bottom) + 26px));
+    border:1px solid rgba(231,185,106,.14);
+    pointer-events:none;
+    opacity:0;
+  }
+  /* four L-bracket corner ticks (drawn with ::before/::after on small spans) */
+  #blueprint .bp-tick{
+    position:absolute; width:20px; height:20px;
+    border-color:var(--gold); opacity:0;
+  }
+  #blueprint .bp-tick::before, #blueprint .bp-tick::after{
+    content:""; position:absolute; background:var(--gold); opacity:.9;
+  }
+  #blueprint .bp-tick::before{ width:20px; height:1.5px; }     /* horizontal arm */
+  #blueprint .bp-tick::after { width:1.5px; height:20px; }     /* vertical arm   */
+  #blueprint .bp-tl{ left:14px;  top:max(50px,calc(env(safe-area-inset-top) + 22px)); }
+  #blueprint .bp-tr{ right:14px; top:max(50px,calc(env(safe-area-inset-top) + 22px)); }
+  #blueprint .bp-bl{ left:14px;  bottom:max(32px,calc(env(safe-area-inset-bottom) + 18px)); }
+  #blueprint .bp-br{ right:14px; bottom:max(32px,calc(env(safe-area-inset-bottom) + 18px)); }
+  #blueprint .bp-tl::before{ left:0; top:0; }
+  #blueprint .bp-tl::after { left:0; top:0; }
+  #blueprint .bp-tr::before{ right:0; top:0; }
+  #blueprint .bp-tr::after { right:0; top:0; }
+  #blueprint .bp-bl::before{ left:0; bottom:0; }
+  #blueprint .bp-bl::after { left:0; bottom:0; }
+  #blueprint .bp-br::before{ right:0; bottom:0; }
+  #blueprint .bp-br::after { right:0; bottom:0; }
+
+  /* drafting annotation blocks */
+  #blueprint .bp-anno{
+    position:absolute;
+    font-family:'Geist Mono', ui-monospace, monospace;
+    font-size:9.5px; line-height:1.85;
+    letter-spacing:.06em; text-transform:uppercase;
+    color:var(--gold); opacity:0;
+    text-shadow:0 1px 6px rgba(0,0,0,.6);
+  }
+  #blueprint .bp-anno b{ font-weight:400; color:var(--gold-soft); }
+  #blueprint .bp-anno .dim{ color:var(--mid); }
+  #blueprint .bp-tlblk{ left:34px;  top:max(70px, calc(env(safe-area-inset-top) + 42px)); text-align:left; }
+  #blueprint .bp-trblk{ right:34px; top:max(70px, calc(env(safe-area-inset-top) + 42px)); text-align:right; }
+
+  /* the heart drawing stage — centred */
+  #blueprint .bp-stage{
+    position:absolute; left:50%; top:48%;
+    transform:translate(-50%,-50%);
+    width:min(58vw, 240px); aspect-ratio:1/1;
+    pointer-events:none;
+  }
+  #blueprint .bp-stage svg{ width:100%; height:100%; display:block; overflow:visible; }
+  /* the stroke that draws on — dash set from getTotalLength() in JS */
+  #blueprint .bp-stroke{
+    fill:none;
+    stroke:var(--gold-soft);
+    stroke-width:1.6;
+    stroke-linecap:round; stroke-linejoin:round;
+    filter:drop-shadow(0 0 6px rgba(231,185,106,.45));
+  }
+  /* the gold fill that fades in after the outline closes */
+  #blueprint .bp-fill{
+    fill:var(--gold);
+    opacity:0;
+    filter:drop-shadow(0 6px 26px rgba(231,185,106,.35));
+  }
+  /* faint construction crosshair behind the heart (schematic feel) */
+  #blueprint .bp-cross{ stroke:rgba(231,185,106,.22); stroke-width:.6; stroke-dasharray:2 3; opacity:0; }
+
+  /* caption under the heart */
+  #blueprint .bp-cap{
+    position:absolute; left:0; right:0;
+    bottom:max(64px, calc(env(safe-area-inset-bottom) + 50px));
+    text-align:center; pointer-events:none;
+  }
+  #blueprint .bp-cap .bp-title{
+    font-family:'Geist Mono', ui-monospace, monospace;
+    font-size:12px; letter-spacing:.42em; text-transform:uppercase;
+    color:var(--gold-soft); opacity:0;
+    text-shadow:0 0 18px rgba(231,185,106,.35);
+    padding-left:.42em;  /* optically re-centre the tracked text */
+  }
+  #blueprint .bp-cap .bp-status{
+    margin-top:11px;
+    font-family:'Geist Mono', ui-monospace, monospace;
+    font-size:9px; letter-spacing:.22em; text-transform:uppercase;
+    color:var(--mid); opacity:0;
+  }
+  #blueprint .bp-cap .bp-status .ok{ color:var(--gold); }
+
   @media (prefers-reduced-motion: reduce){
     *{ animation-duration:.001s !important; transition-duration:.2s !important; }
   }
 </style>
 </head>
 <body>
+
+<!-- ===================== BLUEPRINT INTRO (z-index:10, fades to reveal the reel) ===================== -->
+<div id="blueprint" aria-hidden="true">
+  <div class="bp-grid"></div>
+  <div class="bp-frame"></div>
+
+  <!-- corner registration ticks -->
+  <span class="bp-tick bp-tl"></span>
+  <span class="bp-tick bp-tr"></span>
+  <span class="bp-tick bp-bl"></span>
+  <span class="bp-tick bp-br"></span>
+
+  <!-- drafting annotation blocks -->
+  <div class="bp-anno bp-tlblk">
+    PROJECT: <b>FATHERHOOD</b><br>
+    DRAWN BY: <b>FAMILY</b><br>
+    COMMISSIONED: <b>2004</b><br>
+    SCALE <b>1&nbsp;:&nbsp;&infin;</b>
+  </div>
+  <div class="bp-anno bp-trblk">
+    REV &mdash; <b>FINAL</b><br>
+    SHEET <b>01&nbsp;/&nbsp;01</b><br>
+    STATUS: <b>BUILT</b>
+  </div>
+
+  <!-- the heart: a construction crosshair, a stroke that draws, a fill that resolves -->
+  <div class="bp-stage">
+    <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+      <g class="bp-cross">
+        <line x1="50" y1="2" x2="50" y2="98"></line>
+        <line x1="6" y1="46" x2="94" y2="46"></line>
+      </g>
+      <path class="bp-fill"   d="M50,84 C 18,60 8,40 8,26 C 8,13 18,8 28,8 C 38,8 46,14 50,22 C 54,14 62,8 72,8 C 82,8 92,13 92,26 C 92,40 82,60 50,84 Z"></path>
+      <path class="bp-stroke" d="M50,84 C 18,60 8,40 8,26 C 8,13 18,8 28,8 C 38,8 46,14 50,22 C 54,14 62,8 72,8 C 82,8 92,13 92,26 C 92,40 82,60 50,84 Z"></path>
+    </svg>
+  </div>
+
+  <!-- caption -->
+  <div class="bp-cap">
+    <div class="bp-title">Father's Day &middot; 2026</div>
+    <div class="bp-status">SPEC&nbsp;COMPLETE &middot; <span class="ok">STATUS: BUILT</span></div>
+  </div>
+</div>
 
 <!-- ===================== CSS FALLBACK (always shows) ===================== -->
 <main id="fallback">
@@ -309,6 +475,99 @@
 }
 </script>
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+
+<!-- ===================== BLUEPRINT INTRO — schematic heart-draw, then reveal the reel ===================== -->
+<script>
+/* Independent of the WebGL module: it boots in parallel underneath this layer.
+   This script ONLY animates #blueprint and then removes it. If anything here
+   throws, a hard timeout still tears the layer down so the reel is never blocked. */
+(function(){
+  'use strict';
+  var bp = document.getElementById('blueprint');
+  if(!bp){ return; }
+
+  var REDUCED = false;
+  try{ REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(e){}
+
+  var stroke = bp.querySelector('.bp-stroke');
+
+  // Tear the blueprint down for good — fade, then remove from the box model so it
+  // can never intercept taps or cover the live reel.
+  var torn = false;
+  function teardown(){
+    if(torn) return; torn = true;
+    bp.style.opacity = '0';
+    bp.style.pointerEvents = 'none';
+    setTimeout(function(){ if(bp && bp.parentNode){ bp.style.display = 'none'; } }, 1100);
+  }
+  // Absolute safety net: no matter what, the intro is gone by ~7s.
+  var hardKill = setTimeout(teardown, 7000);
+
+  // Prime the line-draw: dash the full path length and hide it (offset = length).
+  var LEN = 0;
+  try{ LEN = stroke.getTotalLength ? stroke.getTotalLength() : 0; }catch(e){ LEN = 0; }
+  if(LEN > 0){
+    stroke.style.strokeDasharray  = LEN;
+    stroke.style.strokeDashoffset = LEN;
+  }
+
+  var hasGSAP = !!(window.gsap && typeof window.gsap.timeline === 'function');
+
+  if(REDUCED || LEN <= 0){
+    // Reduced-motion (or no measurable path): show the finished spec, hold, dissolve.
+    if(LEN > 0){ stroke.style.strokeDashoffset = 0; }
+    bp.querySelectorAll('.bp-grid,.bp-frame,.bp-tick,.bp-anno,.bp-cross,.bp-title,.bp-status')
+      .forEach(function(el){ el.style.opacity = el.classList.contains('bp-cross') ? 0.5 : 1; });
+    var fillR = bp.querySelector('.bp-fill'); if(fillR){ fillR.style.opacity = 1; }
+    clearTimeout(hardKill);
+    setTimeout(teardown, 1500);
+    return;
+  }
+
+  if(hasGSAP){
+    var gsap = window.gsap;
+    var tl = gsap.timeline({
+      defaults:{ ease:'power2.out' },
+      onComplete:function(){ clearTimeout(hardKill); teardown(); }
+    });
+
+    // 1) the sheet registers: grid, frame, corner ticks, crosshair, annotations draw in
+    tl.to('#blueprint .bp-grid',  { opacity:1, duration:.9 }, 0.05)
+      .to('#blueprint .bp-frame', { opacity:1, duration:.7 }, 0.10)
+      .to('#blueprint .bp-tick',  { opacity:1, duration:.45, stagger:0.08 }, 0.18)
+      .to('#blueprint .bp-cross', { opacity:1, duration:.6 }, 0.30)
+      .to('#blueprint .bp-anno',  { opacity:.95, duration:.7, stagger:0.12 }, 0.35)
+
+      // 2) the heart draws itself, stroke-by-stroke (dashoffset -> 0): done by ~2.65s
+      .to(stroke, { strokeDashoffset:0, duration:2.0, ease:'power1.inOut' }, 0.65)
+
+      // 3) once the outline has CLOSED, gold floods the heart
+      .to('#blueprint .bp-fill', { opacity:1, duration:.9, ease:'power2.out' }, 2.7)
+      // the outline glow eases back as the fill takes over
+      .to(stroke, { opacity:.5, duration:.7 }, 2.85)
+
+      // 4) the caption resolves: title, then the status stamp
+      .to('#blueprint .bp-title',  { opacity:1, duration:.8 }, 2.7)
+      .to('#blueprint .bp-status', { opacity:1, duration:.7 }, 3.15)
+
+      // 5) hold the finished spec, then dissolve to reveal the reel underneath
+      .to({}, { duration:0.9 })
+      .to('#blueprint', { opacity:0, duration:1.0, ease:'power2.inOut' });
+    return;
+  }
+
+  // No GSAP: still honour the intent with a plain CSS transition draw, then dissolve.
+  bp.querySelectorAll('.bp-grid,.bp-frame,.bp-tick,.bp-anno,.bp-cross,.bp-title,.bp-status')
+    .forEach(function(el){ el.style.transition = 'opacity .8s ease'; el.style.opacity = el.classList.contains('bp-cross') ? 0.5 : 1; });
+  stroke.style.transition = 'stroke-dashoffset 2s ease-in-out';
+  // next frame so the transition takes
+  requestAnimationFrame(function(){ requestAnimationFrame(function(){ stroke.style.strokeDashoffset = 0; }); });
+  var fillN = bp.querySelector('.bp-fill');
+  if(fillN){ fillN.style.transition = 'opacity .9s ease'; setTimeout(function(){ fillN.style.opacity = 1; }, 2300); }
+  clearTimeout(hardKill);
+  setTimeout(teardown, 4200);
+})();
+</script>
 
 <script type="module">
 /* ============================================================================
@@ -407,7 +666,7 @@ async function boot(){
   const layout = [
     { tex:textures[0], x:-2.45, y: 0.55, z:-1.2, rotY: 0.42, baseH:3.4 },  // park / easy
     { tex:textures[1], x: 2.45, y:-0.35, z:-1.2, rotY:-0.42, baseH:3.4 },  // drip / cars
-    { tex:textures[2], x: 0.0,  y: 0.55, z: 0.6, rotY: 0.0,  baseH:2.6 },  // family (landscape) — comes forward, sits above the finale text
+    { tex:textures[2], x: 0.0,  y: 1.18, z: 0.6, rotY: 0.0,  baseH:2.6 },  // family (landscape) — comes forward, lifted so the finale eyebrow clears the photo bottom
   ];
   layout.forEach((L, i)=>{
     const card = makePhotoCard(THREE, L.tex, L.baseH, i===2);
