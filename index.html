@@ -544,24 +544,24 @@
       .to('#blueprint .bp-cross', { opacity:1, duration:.6 }, 0.30)
       .to('#blueprint .bp-anno',  { opacity:.95, duration:.7, stagger:0.12 }, 0.35)
 
-      // 2) the heart draws itself, stroke-by-stroke (dashoffset -> 0): done by ~2.65s
-      .to(stroke, { strokeDashoffset:0, duration:2.0, ease:'power1.inOut' }, 0.65)
+      // 2) the heart draws itself, stroke-by-stroke (dashoffset -> 0): done by ~2.05s
+      .to(stroke, { strokeDashoffset:0, duration:1.4, ease:'power1.inOut' }, 0.65)
 
       // 3) once the outline has CLOSED, gold floods the heart
-      .to('#blueprint .bp-fill', { opacity:1, duration:.9, ease:'power2.out' }, 2.7)
+      .to('#blueprint .bp-fill', { opacity:1, duration:.9, ease:'power2.out' }, 2.1)
       // the outline glow eases back as the fill takes over
-      .to(stroke, { opacity:.5, duration:.7 }, 2.85)
+      .to(stroke, { opacity:.5, duration:.7 }, 2.25)
 
       // 4) the caption resolves: title, then the status stamp
-      .to('#blueprint .bp-title',  { opacity:1, duration:.8 }, 2.7)
-      .to('#blueprint .bp-status', { opacity:1, duration:.7 }, 3.15)
+      .to('#blueprint .bp-title',  { opacity:1, duration:.8 }, 2.1)
+      .to('#blueprint .bp-status', { opacity:1, duration:.7 }, 2.5)
 
       // 5) ease the sheet BACK to a soft level so the finale title ("Happy Father's
       //    Day") shows THROUGH alongside the heart — the title card — then HOLD that
-      //    ~4s, then complete the dissolve to reveal the photo reel underneath.
-      .to('#blueprint', { opacity:0.6, duration:1.1, ease:'power2.inOut' }, 4.0)
-      .to({}, { duration:2.5 })
-      .to('#blueprint', { opacity:0, duration:1.0, ease:'power2.inOut' });
+      //    briefly, then complete the dissolve to reveal the photo reel underneath.
+      .to('#blueprint', { opacity:0.6, duration:0.8, ease:'power2.inOut' }, 3.2)
+      .to({}, { duration:0.9 })
+      .to('#blueprint', { opacity:0, duration:0.8, ease:'power2.inOut' });
     return;
   }
 
